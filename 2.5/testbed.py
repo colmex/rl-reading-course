@@ -1,5 +1,7 @@
 import random, csv
 
+random.seed()
+
 class TestBed:
     def __init__(self, agent, stationary=True, arms=10):
         self.stationary = stationary
@@ -28,7 +30,7 @@ class TestBed:
 
                 run_data.append({
                     'reward': reward,
-                    'optimal': self._get_optimal_action() == action,
+                    'optimal': action in self._get_optimal_action(),
                 })
             all_runs.append(run_data)
 
@@ -50,7 +52,19 @@ class TestBed:
         return step_summary
 
     def _get_optimal_action(self):
-        return max(enumerate(self.arms), key=lambda x: x[1]['mean'])[0]
+        best_actions = []
+        for arm, info in enumerate(self.arms):
+            if not best_actions:
+                best_actions.append((arm, info))
+                continue
+
+            if best_actions[0][1]['mean'] < info['mean']:
+                best_actions = [(arm, info)]
+            elif best_actions[0][1]['mean'] == info['mean']:
+                best_actions.append((arm, info))
+            
+        random.shuffle(best_actions)
+        return list(map(lambda x: x[0], best_actions))
 
     def _pull(self, arm):
         if self.stationary:
