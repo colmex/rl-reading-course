@@ -1,0 +1,5 @@
+#virtualenv stuff
+venv/
+
+#data stuff
+*.csv
