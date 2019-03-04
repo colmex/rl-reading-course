@@ -3,14 +3,18 @@ import random, csv
 random.seed()
 
 class TestBed:
-    def __init__(self, agent, stationary=True, arms=10):
+    def __init__(self, agent, stationary=True, arms_count=10):
         self.stationary = stationary
         self.agent = agent
-        if stationary:
+        self.arms_count = arms_count
+        self._reset_environment()
+
+    def _reset_environment(self):
+        if self.stationary:
             raise NotImplementedError
         else:
             self.arms = []
-            for arm in range(arms):
+            for arm in range(self.arms_count):
                 arm = {
                     'mean': 0,
                     'variance': 1,
@@ -22,15 +26,20 @@ class TestBed:
         all_runs = []
         for run in range(runs):
             run_data = []
+            self._reset_environment()
+            self.agent.reset_agent()
             for _ in range(steps):
                 action = self.agent.pick_action()
+                optimal_actions = self._get_optimal_action()
 
                 reward = self._pull(action)
                 self.agent.process_reward(action, reward)
 
                 run_data.append({
                     'reward': reward,
-                    'optimal': action in self._get_optimal_action(),
+                    'optimal': action in optimal_actions,
+                    'optimal_actions': optimal_actions,
+                    'action': action,
                 })
             all_runs.append(run_data)
 
@@ -87,12 +96,17 @@ class Method:
         raise NotImplementedError
 
 class SampleAverageArms(Method):
-    def __init__(self, starting_values, arms=10):
-        self.arms = []
+    def __init__(self, starting_values, arms_count=10):
+        self.starting_values = starting_values
+        self.arms_count = arms_count
 
-        for arm in range(arms):
+        self.reset_agent()
+
+    def reset_agent(self):
+        self.arms = []
+        for arm in range(self.arms_count):
             self.arms.append({
-                'value': float(starting_values),
+                'value': float(self.starting_values),
                 'number_of_rewards': 0
             })
     def pick_action(self):
@@ -116,13 +130,18 @@ class SampleAverageArms(Method):
         self.arms[arm]['value'] = picked_arm['value'] + (float(reward) - picked_arm['value'])/picked_arm['number_of_rewards']
 
 class EpsilonGreedy(Method):
-    def __init__(self, starting_values, step_size, epsilon, arms=10):
+    def __init__(self, starting_values, step_size, epsilon, arms_count=10):
         self.epsilon = epsilon
         self.step_size = step_size
+        self.arms_count = arms_count
+        self.starting_values = starting_values
+        self.reset_agent()
+
+    def reset_agent(self):
         self.arms = []
-        for arm in range(arms):
+        for arm in range(self.arms_count):
             self.arms.append({
-                'value': float(starting_values),
+                'value': float(self.starting_values),
                 'number_of_rewards': 0
             })
 
@@ -142,7 +161,7 @@ class EpsilonGreedy(Method):
             random.shuffle(best_actions)
             return best_actions[0][0]
         else:
-            return random.randint(0,9)
+            return random.randint(0,len(self.arms))
 
     def process_reward(self, arm, reward):
         picked_arm = self.arms[arm]
@@ -166,5 +185,5 @@ if __name__ == '__main__':
 
     with open('episolon_greedy.csv', 'w', newline='') as csvFile:
         writer = csv.writer(csvFile)
-        for index, step in enumerate(testbed.run_test(10000, 1000)):
+        for index, step in enumerate(testbed.run_test(100000, 1000)):
             writer.writerow([ index, step['average_reward'], step['percent_optimal']])
