@@ -84,66 +84,18 @@ class TestBed:
             
             retval = random.gauss(mean, std)
 
-            self.arms[arm]['mean'] = mean + random.gauss(0, 0.01)
+            # Had to bump up the variance on the random walk of the arms because they weren't changing enough for the two algorithms to have any difference
+            self.arms[arm]['mean'] = mean + random.gauss(0, 1)
 
             return retval
 
 class Method:
-    def pick_action(self):
-        raise NotImplementedError
-
-    def process_reward(self):
-        raise NotImplementedError
-
-class SampleAverageArms(Method):
-    def __init__(self, starting_values, arms_count=10):
+    def __init__(self, starting_values, epsilon, arms_count=10):
         self.starting_values = starting_values
         self.arms_count = arms_count
-
-        self.reset_agent()
-
-    def reset_agent(self):
-        self.arms = []
-        for arm in range(self.arms_count):
-            self.arms.append({
-                'value': float(self.starting_values),
-                'number_of_rewards': 0
-            })
-    def pick_action(self):
-        best_actions = []
-        for arm, info in enumerate(self.arms):
-            if not best_actions:
-                best_actions.append((arm, info))
-                continue
-
-            if best_actions[0][1]['value'] < info['value']:
-                best_actions = [(arm, info)]
-            elif best_actions[0][1]['value'] == info['value']:
-                best_actions.append((arm, info))
-            
-        random.shuffle(best_actions)
-        return best_actions[0][0]
-
-    def process_reward(self, arm, reward):
-        picked_arm = self.arms[arm]
-        self.arms[arm]['number_of_rewards'] += 1
-        self.arms[arm]['value'] = picked_arm['value'] + (float(reward) - picked_arm['value'])/picked_arm['number_of_rewards']
-
-class EpsilonGreedy(Method):
-    def __init__(self, starting_values, step_size, epsilon, arms_count=10):
         self.epsilon = epsilon
-        self.step_size = step_size
-        self.arms_count = arms_count
-        self.starting_values = starting_values
-        self.reset_agent()
 
-    def reset_agent(self):
-        self.arms = []
-        for arm in range(self.arms_count):
-            self.arms.append({
-                'value': float(self.starting_values),
-                'number_of_rewards': 0
-            })
+        self.reset_agent()
 
     def pick_action(self):
         if random.random() > self.epsilon:
@@ -161,16 +113,50 @@ class EpsilonGreedy(Method):
             random.shuffle(best_actions)
             return best_actions[0][0]
         else:
-            return random.randint(0,len(self.arms))
+            return random.randint(0,len(self.arms) - 1)
+
+    def process_reward(self):
+        raise NotImplementedError
+
+    def reset_agent(self):
+        raise NotImplementedError
+
+# Only did incrementally computed because it's equivalent to sample average
+class SampleAverageArms(Method):
+    def reset_agent(self):
+        self.arms = []
+        for arm in range(self.arms_count):
+            self.arms.append({
+                'value': float(self.starting_values),
+                'number_of_rewards': 0
+            })
 
     def process_reward(self, arm, reward):
         picked_arm = self.arms[arm]
         self.arms[arm]['number_of_rewards'] += 1
+        self.arms[arm]['value'] = picked_arm['value'] + (float(reward) - picked_arm['value'])/picked_arm['number_of_rewards']
+
+# Uses a step value to determine the learning rate
+class StepValue(Method):
+    def __init__(self, starting_values, epsilon, step_size, arms=10):
+        self.step_size = step_size
+
+        super().__init__(starting_values, epsilon, arms)
+        
+    def reset_agent(self):
+        self.arms = []
+        for arm in range(self.arms_count):
+            self.arms.append({
+                'value': float(self.starting_values),
+            })
+
+    def process_reward(self, arm, reward):
+        picked_arm = self.arms[arm]
         self.arms[arm]['value'] = picked_arm['value'] + (float(reward) - picked_arm['value'])*self.step_size
 
 if __name__ == '__main__':
     testbed = TestBed(
-        SampleAverageArms(0),
+        SampleAverageArms(0, 0.1),
         stationary=False
     )
     with open('sample_average.csv', 'w', newline='') as csvFile:
@@ -179,11 +165,11 @@ if __name__ == '__main__':
             writer.writerow([ index, step['average_reward'], step['percent_optimal']])
 
     testbed = TestBed(
-        EpsilonGreedy(0, 0.1, 0.1),
+        StepValue(0, 0.1, 0.1),
         stationary=False
     )
 
-    with open('episolon_greedy.csv', 'w', newline='') as csvFile:
+    with open('step_value.csv', 'w', newline='') as csvFile:
         writer = csv.writer(csvFile)
-        for index, step in enumerate(testbed.run_test(100000, 1000)):
+        for index, step in enumerate(testbed.run_test(10000, 1000)):
             writer.writerow([ index, step['average_reward'], step['percent_optimal']])
