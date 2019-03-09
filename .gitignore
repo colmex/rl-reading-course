@@ -10,3 +10,6 @@ __pycache__/
 
 # Mac stuff
 .DS_Store
+
+# Vim stuff
+*.swp
